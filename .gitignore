@@ -1,0 +1,17 @@
+user.json
+input/
+output/
+logs/
+__pycache__/
+*.pyc
+*.pyo
+*.bak
+*.bak-*
+*.bak_*
+*.backup_*
+*.pem
+*.key
+.env
+.env.*
+.DS_Store
+lib/core.py.*
