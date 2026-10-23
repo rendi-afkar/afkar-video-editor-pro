@@ -24,13 +24,11 @@ PROJECT_STORAGE = STORAGE_DIR / "afkar-video-editor-pro"
 
 def display_path(path):
     path = Path(path)
-    home = str(Path.home())
-    value = str(path)
-    if value == home:
-        return "/home"
-    if value.startswith(home + "/"):
-        return "/home/" + value[len(home) + 1:]
-    return value
+    home = Path.home()
+    try:
+        return "~/" + str(path.relative_to(home))
+    except ValueError:
+        return str(path)
 INPUT_DIR = PROJECT_STORAGE / "input"
 OUTPUT_DIR = PROJECT_STORAGE / "output"
 
