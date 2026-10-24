@@ -1104,6 +1104,75 @@ def auto_batch_edit():
     print(f"{RED}Gagal: {failed}{RESET}")
     print(f"Output: {display_path(batch_output)}")
 
+
+def check_app_update():
+    """Periksa rilis terbaru AFKAR VIDEO EDITOR PRO di GitHub."""
+    import re
+    import urllib.request
+    import urllib.error
+
+    current_version = "1.0.0"
+    api_url = (
+        "https://api.github.com/repos/"
+        "rendi-afkar/afkar-video-editor-pro/releases/latest"
+    )
+
+    print(f"\n{CYAN}{BOLD}[CEK UPDATE APLIKASI]{RESET}")
+    print(f"Versi saat ini : v{current_version}")
+    print("Memeriksa rilis terbaru di GitHub...")
+
+    request = urllib.request.Request(
+        api_url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "AFKAR-Video-Editor-Pro",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=12) as response:
+            data = json.loads(response.read().decode("utf-8"))
+
+        latest_tag = str(data.get("tag_name", "")).strip()
+        release_url = str(data.get("html_url", "")).strip()
+
+        if not latest_tag or not release_url:
+            raise ValueError("Informasi versi rilis tidak lengkap.")
+
+        def version_key(value):
+            value = value.lstrip("vV")
+            if not re.fullmatch(r"\d+(?:\.\d+)*", value):
+                raise ValueError(f"Format versi tidak dikenal: {value}")
+            return tuple(int(part) for part in value.split("."))
+
+        current_key = version_key(current_version)
+        latest_key = version_key(latest_tag)
+
+        # Samakan panjang tuple agar 1.0 dan 1.0.0 dianggap setara.
+        length = max(len(current_key), len(latest_key))
+        current_key += (0,) * (length - len(current_key))
+        latest_key += (0,) * (length - len(latest_key))
+
+        print(f"Versi terbaru : {latest_tag}")
+
+        if latest_key > current_key:
+            print(f"{YELLOW}[!] Update tersedia!{RESET}")
+            print(f"Rilis: {release_url}")
+            print("Perbarui aplikasi secara manual setelah mencadangkan data.")
+        elif latest_key == current_key:
+            print(f"{GREEN}[OK] Aplikasi sudah up-to-date.{RESET}")
+            print(f"Rilis: {release_url}")
+        else:
+            print(f"{YELLOW}[i] Versi lokal lebih baru daripada rilis GitHub.{RESET}")
+            print(f"Rilis GitHub: {release_url}")
+
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        print(f"{RED}[X] Tidak dapat menghubungi GitHub: {exc}{RESET}")
+        print("Periksa koneksi internet lalu coba lagi.")
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+        print(f"{RED}[X] Data rilis tidak dapat dibaca: {exc}{RESET}")
+
+
 def main():
     ensure_dirs()
 
@@ -1129,6 +1198,7 @@ def main():
             ("12", "CEK FFMPEG"),
             ("13", "GANTI NAMA PENGGUNA"),
             ("14", "AUTO EDIT VIDEO BATCH"),
+            ("15", "CEK UPDATE APLIKASI"),
             ("0", "EXIT"),
         ]
         for n, title in menu:
@@ -1143,6 +1213,7 @@ def main():
             "10": compress_video, "11": show_files, "12": check_deps,
             "13": change_user_name,
             "14": auto_batch_edit,
+            "15": check_app_update,
         }
         if choice in ("0", "q", "exit", "keluar"):
             print(f"\n{GREEN}[+] Sesi ditutup. BY AFKAR.{RESET}")
