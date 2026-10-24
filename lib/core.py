@@ -1167,7 +1167,6 @@ def check_app_update():
             print("Simpan atau periksa perubahan tersebut sebelum update.")
             return
 
-        print("Memeriksa commit terbaru di GitHub...")
         fetch = git("fetch", "origin", "main", timeout=120)
         if fetch.returncode != 0:
             print(f"{RED}[X] Gagal mengambil informasi GitHub.{RESET}")
@@ -1186,9 +1185,6 @@ def check_app_update():
         current_hash = current.stdout.strip()
         latest_hash = latest.stdout.strip()
         behind = int(count.stdout.strip())
-
-        print(f"Commit lokal  : {current_hash}")
-        print(f"Commit GitHub: {latest_hash}")
 
         if behind == 0:
             print(f"{GREEN}[OK] Aplikasi sudah up-to-date.{RESET}")
