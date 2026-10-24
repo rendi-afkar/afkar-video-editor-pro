@@ -1105,72 +1105,136 @@ def auto_batch_edit():
     print(f"Output: {display_path(batch_output)}")
 
 
-def check_app_update():
-    """Periksa rilis terbaru AFKAR VIDEO EDITOR PRO di GitHub."""
-    import re
-    import urllib.request
-    import urllib.error
 
-    current_version = "1.0.0"
-    api_url = (
-        "https://api.github.com/repos/"
-        "rendi-afkar/afkar-video-editor-pro/releases/latest"
-    )
+def check_app_update():
+    """Periksa dan tawarkan update dari branch main GitHub."""
+    import subprocess
+
+    repo = ROOT
+    expected_repo = "rendi-afkar/afkar-video-editor-pro"
+
+    def git(*args, timeout=60):
+        return subprocess.run(
+            ["git", *args],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
 
     print(f"\n{CYAN}{BOLD}[CEK UPDATE APLIKASI]{RESET}")
-    print(f"Versi saat ini : v{current_version}")
-    print("Memeriksa rilis terbaru di GitHub...")
-
-    request = urllib.request.Request(
-        api_url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "AFKAR-Video-Editor-Pro",
-        },
-    )
 
     try:
-        with urllib.request.urlopen(request, timeout=12) as response:
-            data = json.loads(response.read().decode("utf-8"))
+        branch = git("branch", "--show-current")
+        if branch.returncode != 0 or branch.stdout.strip() != "main":
+            print(f"{RED}[X] Update hanya didukung dari branch main.{RESET}")
+            return
 
-        latest_tag = str(data.get("tag_name", "")).strip()
-        release_url = str(data.get("html_url", "")).strip()
+        remote = git("remote", "get-url", "origin")
+        if remote.returncode != 0:
+            print(f"{RED}[X] Remote origin tidak ditemukan.{RESET}")
+            return
 
-        if not latest_tag or not release_url:
-            raise ValueError("Informasi versi rilis tidak lengkap.")
+        url = remote.stdout.strip().lower()
+        allowed = {
+            f"https://github.com/{expected_repo}.git",
+            f"https://github.com/{expected_repo}",
+            f"git@github.com:{expected_repo}.git",
+            f"git@github.com:{expected_repo}",
+            f"ssh://git@github.com/{expected_repo}.git",
+        }
+        if url not in allowed:
+            print(f"{RED}[X] Repository origin tidak cocok. Update dibatalkan.{RESET}")
+            return
 
-        def version_key(value):
-            value = value.lstrip("vV")
-            if not re.fullmatch(r"\d+(?:\.\d+)*", value):
-                raise ValueError(f"Format versi tidak dikenal: {value}")
-            return tuple(int(part) for part in value.split("."))
+        status = git("status", "--porcelain")
+        if status.returncode != 0:
+            print(f"{RED}[X] Tidak dapat memeriksa status repository.{RESET}")
+            return
 
-        current_key = version_key(current_version)
-        latest_key = version_key(latest_tag)
+        # Izinkan hanya binary "main" yang belum terlacak (?? main).
+        unexpected = []
+        for line in status.stdout.splitlines():
+            if not line:
+                continue
+            if line == "?? main":
+                continue
+            unexpected.append(line)
+        if unexpected:
+            print(f"{YELLOW}[!] Ada perubahan lokal. Update dibatalkan agar aman:{RESET}")
+            for line in unexpected:
+                print(f"  {line}")
+            print("Simpan atau periksa perubahan tersebut sebelum update.")
+            return
 
-        # Samakan panjang tuple agar 1.0 dan 1.0.0 dianggap setara.
-        length = max(len(current_key), len(latest_key))
-        current_key += (0,) * (length - len(current_key))
-        latest_key += (0,) * (length - len(latest_key))
+        print("Memeriksa commit terbaru di GitHub...")
+        fetch = git("fetch", "origin", "main", timeout=120)
+        if fetch.returncode != 0:
+            print(f"{RED}[X] Gagal mengambil informasi GitHub.{RESET}")
+            if fetch.stderr.strip():
+                print(fetch.stderr.strip())
+            return
 
-        print(f"Versi terbaru : {latest_tag}")
+        current = git("rev-parse", "--short", "HEAD")
+        latest = git("rev-parse", "--short", "origin/main")
+        count = git("rev-list", "--count", "HEAD..origin/main")
 
-        if latest_key > current_key:
-            print(f"{YELLOW}[!] Update tersedia!{RESET}")
-            print(f"Rilis: {release_url}")
-            print("Perbarui aplikasi secara manual setelah mencadangkan data.")
-        elif latest_key == current_key:
+        if any(result.returncode != 0 for result in (current, latest, count)):
+            print(f"{RED}[X] Gagal membandingkan commit.{RESET}")
+            return
+
+        current_hash = current.stdout.strip()
+        latest_hash = latest.stdout.strip()
+        behind = int(count.stdout.strip())
+
+        print(f"Commit lokal  : {current_hash}")
+        print(f"Commit GitHub: {latest_hash}")
+
+        if behind == 0:
             print(f"{GREEN}[OK] Aplikasi sudah up-to-date.{RESET}")
-            print(f"Rilis: {release_url}")
-        else:
-            print(f"{YELLOW}[i] Versi lokal lebih baru daripada rilis GitHub.{RESET}")
-            print(f"Rilis GitHub: {release_url}")
+            return
 
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        print(f"{RED}[X] Tidak dapat menghubungi GitHub: {exc}{RESET}")
-        print("Periksa koneksi internet lalu coba lagi.")
-    except (ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
-        print(f"{RED}[X] Data rilis tidak dapat dibaca: {exc}{RESET}")
+        print(f"{YELLOW}[!] Tersedia {behind} commit update.{RESET}")
+        print("Repository: https://github.com/rendi-afkar/afkar-video-editor-pro")
+        confirm = input("Unduh dan terapkan update sekarang? [y/N]: ").strip().lower()
+
+        if confirm != "y":
+            print("Update dibatalkan. Tidak ada perubahan diterapkan.")
+            return
+
+        # Cek lagi agar tidak menarik perubahan ke working tree yang berubah.
+        status = git("status", "--porcelain")
+        if status.returncode != 0:
+            print(f"{RED}[X] Tidak dapat memeriksa status repository. Update dibatalkan.{RESET}")
+            return
+
+        unexpected = [
+            line for line in status.stdout.splitlines()
+            if line and line != "?? main"
+        ]
+        if unexpected:
+            print(f"{RED}[X] Status lokal berubah. Update dibatalkan.{RESET}")
+            for line in unexpected:
+                print(f"  {line}")
+            return
+
+        pull = git("pull", "--ff-only", "origin", "main", timeout=120)
+        if pull.stdout.strip():
+            print(pull.stdout.strip())
+
+        if pull.returncode != 0:
+            print(f"{RED}[X] Update gagal. Tidak ada merge otomatis dilakukan.{RESET}")
+            if pull.stderr.strip():
+                print(pull.stderr.strip())
+            return
+
+        print(f"{GREEN}[OK] Update berhasil diterapkan.{RESET}")
+        print("Jalankan ulang ./main untuk memakai kode terbaru.")
+        print("Lisensi dan user.json tidak dihapus oleh perintah update.")
+
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        print(f"{RED}[X] Pemeriksaan update gagal: {exc}{RESET}")
+
 
 
 def main():
