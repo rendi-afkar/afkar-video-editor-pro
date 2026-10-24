@@ -665,8 +665,41 @@ def run_ffmpeg(args, output):
         print()
 
     result = Path(output)
-    if not result.exists() or result.stat().st_size == 0:
+    if not result.is_file() or result.stat().st_size == 0:
         raise RuntimeError("File output tidak terbentuk atau kosong.")
+
+    # Validasi struktur media menggunakan ffprobe.
+    try:
+        check = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(result),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError(
+            f"Tidak dapat memvalidasi output dengan ffprobe: {exc}"
+        ) from exc
+
+    if check.returncode != 0:
+        detail = check.stderr.strip()
+        raise RuntimeError(
+            "Output tidak valid atau tidak dapat dibaca oleh ffprobe."
+            + (f" Detail: {detail}" if detail else "")
+        )
+
+    try:
+        output_duration = float(check.stdout.strip())
+    except (ValueError, TypeError):
+        output_duration = 0.0
+
+    if output_duration <= 0:
+        raise RuntimeError("Durasi output tidak valid atau nol.")
 
     print(f"{GREEN}[OK] Selesai:{RESET} {CYAN}{result}{RESET}")
     print(f"{GREEN}[OK] Ukuran:{RESET} {YELLOW}{result.stat().st_size / (1024*1024):.2f} MB{RESET}")
